@@ -13,8 +13,8 @@ def validate_order(data, instance=None):
     from rest_framework.exceptions import ValidationError
     get = lambda key: data.get(key, getattr(instance, key, None))
     times = [get(k) for k in ["dispatch_at","rental_start","rental_end","expected_return","available_at"]]
-    if all(times) and not (times[0] <= times[1] < times[2] <= times[3] <= times[4]):
-        raise ValidationError("时间必须满足：发货 ≤ 租期开始 < 租期结束 ≤ 预计回库 ≤ 可再次发货。")
+    if all(times) and not (timezone.localdate(times[0]) <= timezone.localdate(times[1]) <= timezone.localdate(times[2]) <= timezone.localdate(times[3]) and times[3] <= times[4]):
+        raise ValidationError("时间必须满足：按日期须满足：发货日期 ≤ 租期开始日期 ≤ 租期结束日期 ≤ 预计回库日期；可再次发货时间不能早于预计回库。")
     status = get("status") or "pending"
     if instance and status != instance.status:
         allowed = {"pending":["shipping","cancelled"],"shipping":["rented","returning"],"rented":["returning"],"returning":["inspection"],"inspection":["completed"],"completed":[],"cancelled":[]}
@@ -22,7 +22,11 @@ def validate_order(data, instance=None):
     if not instance and status != "pending": raise ValidationError("新订单必须为待发货。")
     if instance and instance.status != "pending":
         for key in ["asset","dispatch_at","rental_start","rental_end"]:
-            if key in data and data[key] != getattr(instance,key): raise ValidationError("发货后不可更换实物或修改已确认租期。")
+            if key in data:
+                old, new = getattr(instance,key), data[key]
+                if key in ["rental_start","rental_end"]:
+                    old, new = timezone.localdate(old), timezone.localdate(new)
+                if old != new: raise ValidationError("发货后不可更换实物或修改已确认租期。")
     if status == "completed" and not get("actual_return"): raise ValidationError("完成前请填写实际收到时间。")
     if status not in ["completed","cancelled"] and get("asset"):
         if get("asset").state != "active": raise ValidationError("实物已停用或维修。")

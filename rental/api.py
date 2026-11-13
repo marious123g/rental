@@ -1,3 +1,5 @@
+from datetime import datetime, time
+from django.utils import timezone
 from django.db import transaction
 from django.db.models.deletion import ProtectedError
 from django.utils.dateparse import parse_datetime
@@ -13,7 +15,18 @@ class ProductSerializer(serializers.ModelSerializer):
 class AssetSerializer(serializers.ModelSerializer):
     product_name = serializers.CharField(source="product.name", read_only=True)
     class Meta: model=Asset; fields="__all__"
+class RentalDateField(serializers.DateField):
+    """按业务时区提供日期接口，兼容数据库已有的时间字段。"""
+    def to_internal_value(self, data):
+        day = super().to_internal_value(data)
+        return timezone.make_aware(datetime.combine(day, time.min), timezone.get_default_timezone())
+
+    def to_representation(self, value):
+        return super().to_representation(timezone.localdate(value, timezone.get_default_timezone()))
+
 class OrderSerializer(serializers.ModelSerializer):
+    rental_start = RentalDateField()
+    rental_end = RentalDateField()
     asset_code = serializers.CharField(source="asset.code", read_only=True)
     class Meta: model=Order; fields="__all__"; read_only_fields=["created_at"]
 

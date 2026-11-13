@@ -11,7 +11,7 @@ class BookingTests(TestCase):
         self.client.force_authenticate(get_user_model().objects.create_user("operator",password="test-password"))
         self.asset=Asset.objects.create(product=Product.objects.create(name="相机"),code="CAM001")
         t=timezone.now()+timedelta(days=10)
-        self.data=dict(asset=self.asset.pk,customer="客户",city="上海",dispatch_at=t.isoformat(),rental_start=(t+timedelta(days=1)).isoformat(),rental_end=(t+timedelta(days=2)).isoformat(),expected_return=(t+timedelta(days=3)).isoformat(),available_at=(t+timedelta(days=4)).isoformat())
+        self.data=dict(asset=self.asset.pk,customer="客户",city="上海",dispatch_at=t.isoformat(),rental_start=timezone.localdate(t+timedelta(days=1)).isoformat(),rental_end=timezone.localdate(t+timedelta(days=2)).isoformat(),expected_return=(t+timedelta(days=3)).isoformat(),available_at=(t+timedelta(days=4)).isoformat())
     def create(self): return self.client.post("/api/orders/",self.data,format="json")
     def test_conflict_and_cancel_release(self):
         first=self.create();self.assertEqual(first.status_code,201)
@@ -19,7 +19,7 @@ class BookingTests(TestCase):
         self.assertEqual(self.client.patch(f"/api/orders/{first.data['id']}/",{"status":"cancelled"},format="json").status_code,200)
         self.assertEqual(self.create().status_code,201)
     def test_invalid_dates(self):
-        self.data["rental_end"]=self.data["dispatch_at"]
+        self.data["rental_end"]=timezone.localdate(timezone.now()).isoformat()
         self.assertEqual(self.create().status_code,400)
     def test_inactive_asset(self):
         self.asset.state="maintenance";self.asset.save()
@@ -43,7 +43,8 @@ class BookingTests(TestCase):
         self.create()
         for key in ["dispatch_at","rental_start","rental_end","expected_return","available_at"]:
             from datetime import datetime
-            self.data[key]=(datetime.fromisoformat(self.data[key])+timedelta(days=4)).isoformat()
+            shifted=datetime.fromisoformat(self.data[key])+timedelta(days=4)
+            self.data[key]=shifted.date().isoformat() if key in ["rental_start","rental_end"] else shifted.isoformat()
         self.assertEqual(self.create().status_code,201)
 
     def test_create_asset_from_existing_product_and_book(self):
@@ -58,6 +59,27 @@ class BookingTests(TestCase):
     def test_duplicate_asset_code_rejected(self):
         response=self.client.post("/api/assets/",{"product":self.asset.product_id,"code":self.asset.code,"state":"active"},format="json")
         self.assertEqual(response.status_code,400)
+
+
+    def test_same_day_rental_and_date_only_response(self):
+        self.data["rental_end"]=self.data["rental_start"]
+        result=self.create()
+        self.assertEqual(result.status_code,201)
+        self.assertEqual(result.data["rental_start"],self.data["rental_start"])
+        self.assertEqual(result.data["rental_end"],self.data["rental_end"])
+
+    def test_legacy_order_dates_use_shanghai_and_allow_status_update(self):
+        from datetime import datetime, timezone as dt_timezone
+        result=self.create()
+        order=Order.objects.get(pk=result.data["id"])
+        # 旧订单时间跨 UTC / 上海日期边界时，按上海日期显示。
+        local_day=timezone.localdate(order.rental_start)
+        order.rental_start=timezone.make_aware(datetime.combine(local_day,datetime.min.time()))+timedelta(hours=1)
+        order.status="shipping"
+        order.save()
+        result=self.client.patch(f"/api/orders/{order.pk}/",{"status":"rented","rental_start":local_day.isoformat()},format="json")
+        self.assertEqual(result.status_code,200)
+        self.assertEqual(result.data["rental_start"],local_day.isoformat())
 
 
 class SyncProductAssetsTests(TestCase):
