@@ -1,6 +1,7 @@
 from datetime import datetime, time
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.utils.dateparse import parse_datetime
 from rest_framework import serializers, viewsets
@@ -28,6 +29,8 @@ class OrderSerializer(serializers.ModelSerializer):
     rental_start = RentalDateField()
     rental_end = RentalDateField()
     asset_code = serializers.CharField(source="asset.code", read_only=True)
+    product_name = serializers.CharField(source="asset.product.name", read_only=True)
+    product_model = serializers.CharField(source="asset.product.model", read_only=True)
     class Meta: model=Order; fields="__all__"; read_only_fields=["created_at"]
 
 class BaseViewSet(viewsets.ModelViewSet):
@@ -56,7 +59,13 @@ class AssetViewSet(BaseViewSet):
             result.append({"id":asset.id,"code":asset.code,"product":str(asset.product),"state":asset.state,"available":asset.state=="active" and not orders.exists(),"conflicting_orders":list(orders.values("id","status","expected_return","available_at")),"schedule":list(active.values("id","status","dispatch_at","expected_return","available_at"))})
         return Response(result)
 class OrderViewSet(BaseViewSet):
-    queryset=Order.objects.select_related("asset").all().order_by("-id"); serializer_class=OrderSerializer
+    queryset=Order.objects.select_related("asset__product").all().order_by("-id"); serializer_class=OrderSerializer
+    def get_queryset(self):
+        qs=super().get_queryset()
+        if self.action == "list":
+            for word in self.request.query_params.get("q", "").split():
+                qs=qs.filter(Q(asset__product__name__icontains=word) | Q(asset__product__model__icontains=word) | Q(asset__code__icontains=word))
+        return qs
     def perform_create(self, serializer):
         with transaction.atomic():
             Asset.objects.select_for_update().get(pk=serializer.validated_data["asset"].pk)

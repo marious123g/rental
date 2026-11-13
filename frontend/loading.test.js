@@ -20,3 +20,11 @@ test('order asset search matches name model and code and excludes inactive stock
  state.editing.value.asset=1;assert.equal(state.selectedAsset().id,1);assert.equal(state.editing.value.asset,1);
  state.assetSearch.value='';assert.equal(state.matchingAssets().length,2);
 });
+
+test('submitted order search persists on reload and reset restores all orders',async()=>{
+ const paths=[];const state=app(async path=>{paths.push(path);return {ok:true,status:200,json:async()=>[]};});
+ state.loading.value=false;state.orderSearch.value=' 女仆 蓝色 ';
+ await state.searchOrders();assert.equal(new URL('http://test'+paths.at(-1)).searchParams.get('q'),'女仆 蓝色');
+ await state.load();assert.equal(new URL('http://test'+paths.at(-1)).searchParams.get('q'),'女仆 蓝色');
+ await state.clearOrderSearch();assert.equal(state.orderSearch.value,'');assert.equal(new URL('http://test'+paths.at(-1)).searchParams.get('q'),'');
+});

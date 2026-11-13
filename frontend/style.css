@@ -7,3 +7,5 @@
 .editor-section{scroll-margin-top:20px}
 
 .asset-picker{display:flex;flex-direction:column;gap:8px}.asset-picker small{white-space:normal;line-height:1.5}
+
+.order-search{margin:12px 0 20px}.order-search>label{min-width:min(320px,100%)}

@@ -82,6 +82,24 @@ class BookingTests(TestCase):
         self.assertEqual(result.data["rental_start"],local_day.isoformat())
 
 
+
+    def test_order_search_by_product_model_and_asset_code(self):
+        product=self.asset.product
+        product.name="魔法少女";product.model="Pink";product.save()
+        first=self.create();self.assertEqual(first.status_code,201)
+        other=Asset.objects.create(product=Product.objects.create(name="其他商品"),code="OTHER")
+        self.data["asset"]=other.pk
+        second=self.create();self.assertEqual(second.status_code,201)
+        for keyword in ["魔法", "pink", "cam001", "魔法 Pink"]:
+            result=self.client.get("/api/orders/",{"q":keyword})
+            self.assertEqual([o["id"] for o in result.data],[first.data["id"]])
+            self.assertEqual(result.data[0]["product_name"],"魔法少女")
+        self.assertEqual(len(self.client.get("/api/orders/",{"q":"   "}).data),2)
+        self.assertEqual(len(self.client.get("/api/orders/",{"q":"不存在"}).data),0)
+        self.client.patch(f"/api/orders/{first.data['id']}/",{"status":"cancelled"},format="json")
+        self.assertEqual(self.client.get("/api/orders/",{"q":"魔法"}).data[0]["status"],"cancelled")
+
+
 class SyncProductAssetsTests(TestCase):
     def run_sync(self, apply=False):
         from io import StringIO
