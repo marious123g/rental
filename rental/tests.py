@@ -45,3 +45,16 @@ class BookingTests(TestCase):
             from datetime import datetime
             self.data[key]=(datetime.fromisoformat(self.data[key])+timedelta(days=4)).isoformat()
         self.assertEqual(self.create().status_code,201)
+
+    def test_create_asset_from_existing_product_and_book(self):
+        product=Product.objects.create(name="已有商品",model="型号A")
+        response=self.client.post("/api/assets/",{"product":product.pk,"code":"NEW-001","state":"active"},format="json")
+        self.assertEqual(response.status_code,201)
+        self.assertEqual(response.data["product_name"],"已有商品")
+        listing=self.client.get("/api/assets/")
+        self.assertTrue(any(a["id"]==response.data["id"] for a in listing.data))
+        self.data["asset"]=response.data["id"]
+        self.assertEqual(self.create().status_code,201)
+    def test_duplicate_asset_code_rejected(self):
+        response=self.client.post("/api/assets/",{"product":self.asset.product_id,"code":self.asset.code,"state":"active"},format="json")
+        self.assertEqual(response.status_code,400)
