@@ -1,0 +1,10 @@
+.git
+.env
+.venv
+node_modules
+backups
+*.sqlite3
+__pycache__
+
+frontend/.npm-cache
+frontend/node_modules

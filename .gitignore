@@ -1,0 +1,27 @@
+.env
+.venv/
+__pycache__/
+*.sqlite3
+staticfiles/
+backups/
+node_modules/
+frontend/dist/
+
+.npm-cache/
+
+# Secrets and local files
+.env.*
+!.env.example
+*.pem
+*.key
+*.sqlite3-*
+*.dump
+*.log
+.pytest_cache/
+.coverage
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+static/app.js
+static/style.css
