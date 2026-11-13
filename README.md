@@ -79,3 +79,14 @@ sudo bash deploy/restore.sh backups/实际文件名.dump --confirm-overwrite
 ```
 
 生产排查：`sudo docker compose logs --tail=100 web nginx db`。后台 `/admin/` 可查看操作记录。
+
+## 将商品目录补充到实物库存
+
+仅为没有任何实物库存的商品创建一件正常状态实物。已有实物（包括停用或维修）会跳过，不会修改已有数量、状态或订单。生成唯一编号 `AUTO-商品ID`，并写入操作记录。默认预览不写入，可重复执行。
+
+```bash
+sudo docker compose exec web python manage.py sync_product_assets
+sudo docker compose exec web python manage.py sync_product_assets --apply
+```
+
+执行前请确认这些商品确实各有一件可出租实物；命令不推断真实库存数量。正式同步前可先运行 `sudo bash deploy/backup.sh`。

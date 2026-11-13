@@ -58,3 +58,40 @@ class BookingTests(TestCase):
     def test_duplicate_asset_code_rejected(self):
         response=self.client.post("/api/assets/",{"product":self.asset.product_id,"code":self.asset.code,"state":"active"},format="json")
         self.assertEqual(response.status_code,400)
+
+
+class SyncProductAssetsTests(TestCase):
+    def run_sync(self, apply=False):
+        from io import StringIO
+        from django.core.management import call_command
+        output=StringIO()
+        call_command("sync_product_assets", apply=apply, stdout=output)
+        return output.getvalue()
+
+    def test_preview_does_not_write(self):
+        from .models import Audit
+        Product.objects.create(name="相机")
+        self.assertIn("AUTO-", self.run_sync())
+        self.assertEqual(Asset.objects.count(),0)
+        self.assertEqual(Audit.objects.count(),0)
+
+    def test_apply_is_repeatable_and_preserves_existing_stock(self):
+        from .models import Audit
+        missing=Product.objects.create(name="新商品")
+        existing=Product.objects.create(name="已有商品")
+        asset=Asset.objects.create(product=existing,code="MANUAL",state="maintenance")
+        self.run_sync(True)
+        self.run_sync(True)
+        self.assertEqual(Asset.objects.count(),2)
+        self.assertEqual(Asset.objects.get(product=missing).state,"active")
+        asset.refresh_from_db()
+        self.assertEqual(asset.state,"maintenance")
+        self.assertEqual(Audit.objects.count(),1)
+
+    def test_generated_code_collision_does_not_overwrite(self):
+        missing=Product.objects.create(name="缺库存")
+        other=Product.objects.create(name="其他商品")
+        base=f"AUTO-{missing.pk:06d}"
+        Asset.objects.create(product=other,code=base)
+        self.run_sync(True)
+        self.assertEqual(Asset.objects.get(product=missing).code,base+"-1")
