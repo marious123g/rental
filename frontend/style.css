@@ -3,3 +3,5 @@
 .asset-helper{padding:16px;background:#f1f8f6;border-radius:8px;margin-bottom:20px}.asset-helper p{color:#526b73}
 
 .loading-state{min-height:180px;display:flex;justify-content:center;align-items:center;gap:12px;color:#526b73}.spinner{display:inline-block;width:24px;height:24px;border:3px solid #dcece7;border-top-color:#087f72;border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.spinner{animation:none}}
+
+.editor-section{scroll-margin-top:20px}
