@@ -100,6 +100,39 @@ class BookingTests(TestCase):
         self.assertEqual(self.client.get("/api/orders/",{"q":"魔法"}).data[0]["status"],"cancelled")
 
 
+
+    def test_confirm_shipment_and_repeated_action(self):
+        from .models import Audit
+        first=self.create()
+        url=f"/api/orders/{first.data['id']}/confirm-shipment/"
+        response=self.client.post(url,{},format="json")
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.data["status"],"shipping")
+        self.assertEqual(self.client.post(url,{},format="json").status_code,400)
+        self.assertEqual(Audit.objects.filter(action="confirm_shipment").count(),1)
+
+    def test_inspection_records_receipt_and_preserves_existing_time(self):
+        for status in ["returning","inspection"]:
+            first=self.create();order=Order.objects.get(pk=first.data["id"])
+            order.status=status
+            old=timezone.now()-timedelta(hours=1) if status=="inspection" else None
+            order.actual_return=old;order.save()
+            url=f"/api/orders/{order.pk}/complete-inspection/"
+            response=self.client.post(url,{},format="json")
+            self.assertEqual(response.status_code,200)
+            order.refresh_from_db();self.assertEqual(order.status,"completed")
+            self.assertIsNotNone(order.actual_return)
+            if old:self.assertEqual(order.actual_return,old)
+            self.assertEqual(self.client.post(url,{},format="json").status_code,400)
+
+    def test_cannot_complete_inspection_before_return(self):
+        first=self.create()
+        url=f"/api/orders/{first.data['id']}/complete-inspection/"
+        self.assertEqual(self.client.post(url,{},format="json").status_code,400)
+        order=Order.objects.get(pk=first.data["id"])
+        self.assertEqual(order.status,"pending");self.assertIsNone(order.actual_return)
+
+
 class SyncProductAssetsTests(TestCase):
     def run_sync(self, apply=False):
         from io import StringIO

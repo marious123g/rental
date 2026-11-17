@@ -79,4 +79,34 @@ class OrderViewSet(BaseViewSet):
             serializer.instance=current
             validate_order(serializer.validated_data,current)
             super().perform_update(serializer)
+    @action(detail=True, methods=["post"], url_path="confirm-shipment")
+    def confirm_shipment(self, request, pk=None):
+        with transaction.atomic():
+            current=Order.objects.select_for_update().get(pk=self.get_object().pk)
+            if current.status != "pending":
+                raise ValidationError("只有待发货订单可以确认发货。")
+            Asset.objects.select_for_update().get(pk=current.asset_id)
+            validate_order({"status":"shipping"},current)
+            current.status="shipping"
+            current.save(update_fields=["status"])
+            self.record("confirm_shipment",current)
+        return Response(self.get_serializer(current).data)
+
+    @action(detail=True, methods=["post"], url_path="complete-inspection")
+    def complete_inspection(self, request, pk=None):
+        with transaction.atomic():
+            current=Order.objects.select_for_update().get(pk=self.get_object().pk)
+            if current.status not in ["returning","inspection"]:
+                raise ValidationError("只有归还中或待验收订单可以完成验收。")
+            Asset.objects.select_for_update().get(pk=current.asset_id)
+            # 此操作表示已经收货且验收完成，归还中订单一并通过验收步骤。
+            current.status="inspection"
+            actual_return=current.actual_return or timezone.now()
+            validate_order({"status":"completed","actual_return":actual_return},current)
+            current.status="completed"
+            current.actual_return=actual_return
+            current.save(update_fields=["status","actual_return"])
+            self.record("complete_inspection",current)
+        return Response(self.get_serializer(current).data)
+
     def destroy(self, request, *args, **kwargs): raise ValidationError("订单保留历史，请将待发货订单状态改为已取消。")
